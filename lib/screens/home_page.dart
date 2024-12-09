@@ -22,13 +22,20 @@ class HomePage extends StatefulWidget {
   _HomePageState createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+
+class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   final CountDownController _clockController = CountDownController();
   bool _isClockStarted = false;
   bool _isPaused = false;
   bool _isBreakTime = false;
-  int focusTimeInMinutes = 1;
-  int breakTimeInMinutes = 1;
+  int focusTimeInMinutes = 25;
+  int breakTimeInMinutes = 5;
+
+  @override
+  void initState() {
+    _clockController.restart(duration: focusTimeInMinutes * 60);
+    super.initState();
+  }
 
   void startClock() {
     setState(() {
@@ -55,7 +62,7 @@ class _HomePageState extends State<HomePage> {
   void resetClock() {
     setState(() {
       _clockController.restart(
-          duration: focusTimeInMinutes * 5); // Reset to 25 minutes
+          duration: focusTimeInMinutes * 60); // Reset to 25 minutes
       _clockController.pause(); // Ensure the timer does not auto-start
       _isPaused = false;
       _isClockStarted = false;
@@ -67,7 +74,7 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       debugPrint("Pause Pause Pause");
       _clockController.restart(
-          duration: breakTimeInMinutes * 3); // Reset to 5 minutes
+          duration: breakTimeInMinutes * 60); // Reset to 5 minutes
       _clockController.pause(); // Ensure the timer does not auto-start
       _isPaused = false;
       _isClockStarted = false;
@@ -107,7 +114,7 @@ class _HomePageState extends State<HomePage> {
       actions: [
         AnimatedContainer(
           duration:
-              const Duration(milliseconds: 300), // Duration for the animation
+          const Duration(milliseconds: 300), // Duration for the animation
           curve: Curves.easeInOut, // Smooth curve for the animation
           padding: const EdgeInsets.symmetric(horizontal: 30.0, vertical: 15.0),
           child: ElevatedButton(
@@ -120,7 +127,7 @@ class _HomePageState extends State<HomePage> {
               duration: const Duration(
                   milliseconds: 300), // Duration for the text size animation
               tween:
-                  Tween<double>(begin: 14.0, end: 24.0), // Animating font size
+              Tween<double>(begin: 14.0, end: 24.0), // Animating font size
               builder: (context, fontSize, child) {
                 return Text(
                   !_isBreakTime ? "Start Focus" : "Start Break",
@@ -152,7 +159,7 @@ class _HomePageState extends State<HomePage> {
 
     CircularCountDownTimer clock = CircularCountDownTimer(
       controller: _clockController,
-      duration: focusTimeInMinutes * 5, // 25 minutes
+      duration: focusTimeInMinutes * 60, // 25 minutes
       height: height,
       width: width,
       ringColor: Colors.grey.shade800,

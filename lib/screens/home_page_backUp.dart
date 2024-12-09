@@ -1,22 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:circular_countdown_timer/circular_countdown_timer.dart';
-import 'package:pomodoro_productivity/utils/countdown_timer.dart';
-import '../utils/constants.dart';
 import 'package:ndialog/ndialog.dart';
-
-
+import 'package:vibration/vibration.dart';
 
 class HomePage extends StatefulWidget {
   final List<Icon> timesCompleted = [];
 
   HomePage() {
-    // Initialize times completed dot icons
     for (var i = 0; i < 3; i++) {
       timesCompleted.add(
-        const Icon(
+        Icon(
           Icons.brightness_1_rounded,
-          color: Colors.blueGrey,
-          size: 5.0,
+          color: Colors.blueGrey.shade300,
+          size: 9.0,
         ),
       );
     }
@@ -26,159 +22,260 @@ class HomePage extends StatefulWidget {
   _HomePageState createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+
+class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   final CountDownController _clockController = CountDownController();
-  Icon _clockButton = kPlayClockButton; // Initial value
-  bool _isClockStarted = false; // Conditional flag
-  int indexTimesCompleted = 0; // Declare indexTimesCompleted here
+  bool _isClockStarted = false;
+  bool _isPaused = false;
+  bool _isBreakTime = false;
+  int focusTimeInMinutes = 1;
+  int breakTimeInMinutes = 5;
 
-  // Change Clock button icon and controller
-  void switchClockActionButton() {
-    if (_clockButton == kPlayClockButton) {
-      _clockButton = kPauseClockButton;
-
-      if (!_isClockStarted) {
-        // Processed on init
-        _isClockStarted = true;
-        _clockController.start();
-      } else {
-        // Processed on play
-        _clockController.resume();
-      }
-    } else {
-      // Processed on pause
-      _clockButton = kPlayClockButton;
-      _clockController.pause();
-    }
+  @override
+  void initState() {
+    _clockController.restart(duration: focusTimeInMinutes * 60);
+    super.initState();
   }
 
-  // Handle completion asynchronously
-  Future<void> handleCompletion() async {
-    int currentIndex = indexTimesCompleted;
+  void startClock() {
+    setState(() {
+      _clockController.start();
+      _isClockStarted = true;
+      _isPaused = false;
+    });
+  }
 
-    widget.timesCompleted[indexTimesCompleted] = Icon(
-      Icons.brightness_1_rounded,
-      color: Colors.pink,
-      size: 5.0,
-    );
-    indexTimesCompleted++;
+  void pauseClock() {
+    setState(() {
+      _clockController.pause();
+      _isPaused = true;
+    });
+  }
+
+  void resumeClock() {
+    setState(() {
+      _clockController.resume();
+      _isPaused = false;
+    });
+  }
+
+  void resetClock() {
+    setState(() {
+      _clockController.restart(
+          duration: focusTimeInMinutes * 60); // Reset to 25 minutes
+      _clockController.pause(); // Ensure the timer does not auto-start
+      _isPaused = false;
+      _isClockStarted = false;
+      _isBreakTime = false;
+    });
+  }
+
+  void resetClockForPause() {
+    setState(() {
+      debugPrint("Pause Pause Pause");
+      _clockController.restart(
+          duration: breakTimeInMinutes * 60); // Reset to 5 minutes
+      _clockController.pause(); // Ensure the timer does not auto-start
+      _isPaused = false;
+      _isClockStarted = false;
+      _isBreakTime = true;
+    });
+  }
+
+  Future<void> handleCompletion() async {
+    int indexTimesCompleted = widget.timesCompleted
+        .indexWhere((icon) => icon.color == Colors.blueGrey.shade300);
+
+    if (_isBreakTime == false) {
+      resetClockForPause();
+    } else {
+      resetClock();
+    }
+
+    if (indexTimesCompleted != -1 && _isBreakTime == true) {
+      setState(() {
+        widget.timesCompleted[indexTimesCompleted] = const Icon(
+          Icons.brightness_1_rounded,
+          color: Colors.greenAccent,
+          size: 10.0,
+        );
+      });
+    }
 
     await NDialog(
       dialogStyle: DialogStyle(titleDivider: true),
-      title: Text("Timer Completed"),
-      content: Text("Time to break."),
-      actions: <Widget>[
-        ElevatedButton(
-          style: ButtonStyle(
-            backgroundColor: MaterialStateColor.resolveWith(
-                    (states) => Colors.green),
+      title: const Text("Session Complete!"),
+      content: Padding(
+        padding: const EdgeInsets.only(left: 10, top: 20, bottom: 40),
+        child: !_isBreakTime
+            ? const Text("Great job! Let's focus again.")
+            : const Text("Great job! Take a short break."),
+      ),
+      actions: [
+        AnimatedContainer(
+          duration:
+          const Duration(milliseconds: 300), // Duration for the animation
+          curve: Curves.easeInOut, // Smooth curve for the animation
+          padding: const EdgeInsets.symmetric(horizontal: 30.0, vertical: 15.0),
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.0)),
+            ),
+            child: TweenAnimationBuilder(
+              duration: const Duration(
+                  milliseconds: 300), // Duration for the text size animation
+              tween:
+              Tween<double>(begin: 14.0, end: 24.0), // Animating font size
+              builder: (context, fontSize, child) {
+                return Text(
+                  !_isBreakTime ? "Start Focus" : "Start Break",
+                  style: TextStyle(
+                    fontSize: fontSize,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                );
+              },
+            ),
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
           ),
-          child: Text("Start a short break"),
-          onPressed: () {
-            // Execute any additional logic for the button press if needed
-            // ...
-
-            // Update the widget state within setState
-            setState(() {
-              widget.timesCompleted[currentIndex] = Icon(
-                Icons.brightness_1_rounded,
-                color: Colors.pink,
-                size: 10.0,
-              );
-            });
-          },
         ),
       ],
     ).show(context);
+
+    if ((await Vibration.hasVibrator()) == true) {
+      Vibration.vibrate(duration: 500);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Half Screen Dimensions
-    final double height = MediaQuery.of(context).size.height / 2;
-    final double width = MediaQuery.of(context).size.width / 2;
-
-    CountDownTimer _countDownTimer = CountDownTimer(
-      duration: kWorkDuration,
-      fillColor: Colors.pink,
-      onComplete: () {
-        // Call the asynchronous function without async/await inside setState
-        handleCompletion();
-      },
-    );
+    final double height = MediaQuery.of(context).size.height / 2.5;
+    final double width = MediaQuery.of(context).size.width / 1.2;
 
     CircularCountDownTimer clock = CircularCountDownTimer(
       controller: _clockController,
-      isReverseAnimation: true,
-      ringColor: Color(0xff0B0C19),
+      duration: focusTimeInMinutes * 60, // 25 minutes
       height: height,
       width: width,
-      autoStart: false,
-      duration: _countDownTimer.duration * 60,
-      isReverse: true,
-      textStyle: TextStyle(color: Colors.white, fontSize: 25),
-      fillColor: _countDownTimer.fillColor,
-      backgroundColor: Color(0xFF2A2B4D),
+      ringColor: Colors.grey.shade800,
+      fillColor: Colors.blueAccent,
+      backgroundColor: Colors.grey.shade900,
       strokeCap: StrokeCap.round,
-      onComplete: _countDownTimer.onComplete(),
+      isReverse: true,
+      isReverseAnimation: true,
+      autoStart: false,
+      textStyle: const TextStyle(
+        fontSize: 35.0,
+        fontWeight: FontWeight.bold,
+        color: Colors.white,
+      ),
+      onComplete: handleCompletion,
     );
 
     return Scaffold(
       appBar: AppBar(
-        elevation: 0.0,
-        leading: IconButton(
-          onPressed: () {},
-          icon: Icon(Icons.headset_off),
-        ),
-        title: Text('Pomodoro'),
+        elevation: 0,
+        backgroundColor: Colors.black,
+        title: const Text("Pomodoro",
+            style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
         actions: [
           IconButton(
-            onPressed: () {},
-            icon: Icon(Icons.alarm_off),
+            icon: const Icon(Icons.settings, color: Colors.white),
+            onPressed: () {
+              // Navigate to settings page
+            },
           ),
         ],
       ),
       body: Container(
+        color: Colors.black,
         child: Padding(
           padding: const EdgeInsets.all(20.0),
           child: Column(
-            children: <Widget>[
-              Center(
-                child: clock,
-              ),
-              Text(
-                kWorkLabel,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 25,
-                ),
-              ),
-              SizedBox(
-                height: 10.0,
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              clock,
+              Column(
+                children: [
+                  Text(
+                    _isBreakTime ? "Break Time..." : "Focus Time...",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20.0,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 10.0),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: widget.timesCompleted,
+                  ),
+                ],
               ),
               Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: widget.timesCompleted,
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20.0),
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      switchClockActionButton();
-                    });
-                  },
-                  child: Container(
-                    width: width / 2.5,
-                    height: height / 8,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).primaryColor,
-                      borderRadius: BorderRadius.circular(10.0),
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  if (!_isClockStarted || _isPaused)
+                    GestureDetector(
+                      onTap: () {
+                        if (!_isClockStarted) {
+                          startClock();
+                        } else {
+                          resumeClock();
+                        }
+                      },
+                      child: Container(
+                        width: width / 2.5,
+                        height: 50.0,
+                        decoration: BoxDecoration(
+                          color: Colors.blueAccent,
+                          borderRadius: BorderRadius.circular(10.0),
+                        ),
+                        child: const Center(
+                          child: Icon(Icons.play_arrow,
+                              color: Colors.white, size: 40.0),
+                        ),
+                      ),
                     ),
-                    child: _clockButton,
-                  ),
-                ),
+                  if (_isClockStarted && !_isPaused)
+                    GestureDetector(
+                      onTap: pauseClock,
+                      child: Container(
+                        width: width / 2.5,
+                        height: 50.0,
+                        decoration: BoxDecoration(
+                          color: Colors.orangeAccent,
+                          borderRadius: BorderRadius.circular(10.0),
+                        ),
+                        child: const Center(
+                          child: Icon(Icons.pause,
+                              color: Colors.white, size: 40.0),
+                        ),
+                      ),
+                    ),
+                  if (_isPaused)
+                    GestureDetector(
+                      onTap: resetClock,
+                      child: Container(
+                        width: width / 2.5,
+                        height: 50.0,
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(10.0),
+                        ),
+                        child: const Center(
+                          child: Icon(Icons.replay,
+                              color: Colors.white, size: 40.0),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ],
           ),
