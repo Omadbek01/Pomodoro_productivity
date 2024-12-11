@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:circular_countdown_timer/circular_countdown_timer.dart';
 import 'package:ndialog/ndialog.dart';
 import 'package:vibration/vibration.dart';
+import 'package:audioplayers/audioplayers.dart';
 import '../utils/clockControlButton.dart';
 import '../screens/settingsPage.dart';
 import '../utils/settingsSharedPreferences.dart';
@@ -36,7 +37,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   bool _isDarkModeEnabled = false;
   int focusTimeInMinutes = 1;
   int breakTimeInMinutes = 1;
-  int varSeconds = 5;
+  int varSeconds = 60;
 
   @override
   void initState() {
@@ -76,9 +77,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               // If the clock is not running, restart it with the updated duration
               if (!_isClockStarted) {
                 setState(() {
-                  !_isBreakTime?
-                  _restartClock(duration: focusTimeInMinutes * varSeconds):
-                  _restartClock(duration: breakTimeInMinutes * varSeconds);
+                  !_isBreakTime
+                      ? _restartClock(duration: focusTimeInMinutes * varSeconds)
+                      : _restartClock(
+                          duration: breakTimeInMinutes * varSeconds);
                 });
               }
             },
@@ -212,6 +214,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   Future<void> handleCompletion() async {
     await _handleVibration();
     _updateTimesCompleted();
+    _playAudio();
 
     // Reset clock based on session type
     if (!_isBreakTime) {
@@ -255,6 +258,16 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       debugPrint("Vibrating for half a second.");
     } else {
       debugPrint("No vibration detected. Vibration pref: $_isVibrationEnabled");
+    }
+  }
+
+  //Play audio
+  Future<void> _playAudio() async {
+    final player = AudioPlayer();
+    try {
+      _isMelodyEnabled ? await player.play(AssetSource('1.mp3')) : null;
+    } catch (e) {
+      debugPrint("Error playing audio: $e");
     }
   }
 

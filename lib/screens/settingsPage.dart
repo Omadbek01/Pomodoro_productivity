@@ -99,7 +99,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
                   // Dark Mode Switch
                   _buildSwitch(
-                    title: "Enable Dark Mode",
+                    title: "Enable Dark Mode (coming soon)",
                     value: _isDarkModeEnabled?? false,
                     onChanged: (value) {
                       setState(() {
