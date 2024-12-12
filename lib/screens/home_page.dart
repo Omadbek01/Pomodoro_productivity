@@ -4,12 +4,13 @@ import 'package:ndialog/ndialog.dart';
 import 'package:vibration/vibration.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:blinking_text/blinking_text.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest.dart' as tz;
 
 import '../utils/clockControlButton.dart';
 import '../screens/settingsPage.dart';
 import '../utils/settingsSharedPreferences.dart';
 import '../notification/localNotifications.dart';
-
 
 class HomePage extends StatefulWidget {
   final List<Icon> timesCompleted = [];
@@ -37,11 +38,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   bool _isClockStarted = false;
   bool _isPaused = false;
   bool _isBreakTime = false;
-  bool _isMelodyEnabled = true;
+  bool _isEnableMelody = true;
   bool _isDarkModeEnabled = false;
-  int focusTimeInMinutes = 1;
-  int breakTimeInMinutes = 1;
+  int focusTimeInMinutes = 25;
+  int breakTimeInMinutes = 5;
   int varSeconds = 60;
+  DateTime _scheduleTime = tz.TZDateTime.now(tz.local).add(Duration(seconds: 15));
 
   @override
   void initState() {
@@ -125,7 +127,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         //PLAY BUTTON
                         if (!_isClockStarted || _isPaused)
                           ClockControlButton(
-                              onTap: () {
+                              onTap: () async {
                                 if (!_isClockStarted) {
                                   startClock();
                                 } else {
@@ -133,6 +135,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                 }
                                 NotificationService()
                                     .requestNotificationPermission();
+                                /*await NotificationService().scheduledNotification(
+                                  id: 1, // Provide a unique ID for the notification
+                                  title: "Pomodoro Timer", // Add a title
+                                  body: "Your focus time is up!", // Add a body text
+                                  scheduledNotificationDateTime: _scheduleTime,
+                                );*/
                               },
                               color: Colors.blueAccent,
                               icon: Icons.play_arrow,
@@ -179,7 +187,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           Column(
                             children: [
                               ClockControlButton(
-                                  onTap: resetClock,
+                                  onTap: () {
+                                    NotificationService().notificationsPlugin.cancel(1);
+                                    resetClock();
+                                  },
                                   color: Colors.orangeAccent,
                                   icon: Icons.skip_next,
                                   width: width),
@@ -228,6 +239,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       _clockController.start();
       _isClockStarted = true;
       _isPaused = false;
+      _scheduleNotification();
     });
   }
 
@@ -236,6 +248,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     setState(() {
       _clockController.pause();
       _isPaused = true;
+      NotificationService().notificationsPlugin.cancel(1);
     });
   }
 
@@ -244,6 +257,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     setState(() {
       _clockController.resume();
       _isPaused = false;
+      _scheduleNotification();
     });
   }
 
@@ -271,17 +285,29 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     });
   }
 
+  // Utility to schedule notification
+  void _scheduleNotification() {
+    // Attempt to parse the time as an integer
+    final int remainingTimeInSeconds = int.tryParse(_clockController.getTime()?.toString() ?? '') ?? 0;
+
+    final DateTime endTime = DateTime.now().add(
+      Duration(seconds: remainingTimeInSeconds), // Remaining time
+    );
+
+    NotificationService().scheduledNotification(
+      id: 1,
+      title: "Pomodoro Timer",
+      body: _isBreakTime ? "Great job! Let's focus again." : "Great job! Take a short break.",
+      scheduledNotificationDateTime: endTime,
+    );
+  }
+
+
   // Handle session completion
   Future<void> handleCompletion() async {
-    NotificationService().showNotification(
-      title: "Session Complete!",
-      body: _isBreakTime
-          ? "Great job! Let's focus again."
-          : "Great job! Take a short break.",
-    );
     await _handleVibration();
     _updateTimesCompleted();
-    _playAudio();
+
 
     // Reset clock based on session type
     if (!_isBreakTime) {
@@ -329,14 +355,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   //Play audio
-  Future<void> _playAudio() async {
+  /*Future<void> _playAudio() async {
     final player = AudioPlayer();
     try {
-      _isMelodyEnabled ? await player.play(AssetSource('1.mp3')) : null;
+      //_isMelodyEnabled ? await player.play(AssetSource('1.mp3')) : null;
     } catch (e) {
       debugPrint("Error playing audio: $e");
     }
-  }
+  }*/
 
   // Update times completed
   void _updateTimesCompleted() {
@@ -408,7 +434,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     focusTimeInMinutes = await PreferencesService.getFocusTime();
     breakTimeInMinutes = await PreferencesService.getBreakTime();
     _isVibrationEnabled = await PreferencesService.isVibrationEnabled();
-    _isMelodyEnabled = await PreferencesService.isMelodyEnabled();
+    _isEnableMelody = await PreferencesService.isMelodyEnabled();
     _isDarkModeEnabled = await PreferencesService.isDarkModeEnabled();
     setState(() {});
   }

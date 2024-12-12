@@ -1,5 +1,7 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 
 class NotificationService {
   final FlutterLocalNotificationsPlugin notificationsPlugin =
@@ -23,15 +25,17 @@ class NotificationService {
   }
 
   notificationDetails() {
-    return const NotificationDetails(
+    return NotificationDetails(
         android: AndroidNotificationDetails(
           'channelId',
           'channelName',
           importance: Importance.max,
           priority: Priority.high,
+          playSound: true,
           visibility: NotificationVisibility.public,
+          sound: RawResourceAndroidNotificationSound('notification'),
         ),
-        iOS: DarwinNotificationDetails());
+        iOS: const DarwinNotificationDetails());
   }
 
   Future<void> requestNotificationPermission() async {
@@ -42,9 +46,31 @@ class NotificationService {
   }
 
   Future showNotification(
-      {int id = 0, String? title, String? body, String? payLoad}) async {
+      {int id = 0, String? title, String? body, String? payLoad, bool? isNotificationSoundEnabled}) async {
     requestNotificationPermission();
     return notificationsPlugin.show(
         id, title, body, await notificationDetails());
+  }
+
+  Future scheduledNotification({
+    int id = 0,
+    String? title,
+    String? body,
+    String? payLoad,
+    required DateTime scheduledNotificationDateTime,
+  }) async {
+    // Cancel any existing notification with the same ID
+    await notificationsPlugin.cancel(id);
+
+    // Schedule the new notification
+    return notificationsPlugin.zonedSchedule(
+        id,
+        title,
+        body,
+        tz.TZDateTime.from(scheduledNotificationDateTime, tz.local),
+        notificationDetails(),
+        androidScheduleMode: AndroidScheduleMode.exact,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime);
   }
 }
