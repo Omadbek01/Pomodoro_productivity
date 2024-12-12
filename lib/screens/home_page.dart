@@ -3,9 +3,13 @@ import 'package:circular_countdown_timer/circular_countdown_timer.dart';
 import 'package:ndialog/ndialog.dart';
 import 'package:vibration/vibration.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:blinking_text/blinking_text.dart';
+
 import '../utils/clockControlButton.dart';
 import '../screens/settingsPage.dart';
 import '../utils/settingsSharedPreferences.dart';
+import '../notification/localNotifications.dart';
+
 
 class HomePage extends StatefulWidget {
   final List<Icon> timesCompleted = [];
@@ -43,6 +47,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   void initState() {
     _restartClock(duration: focusTimeInMinutes * varSeconds);
     getSharedSettingsPrerefence();
+    NotificationService().initNotification();
     super.initState();
   }
 
@@ -112,42 +117,89 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   ),
                 ],
               ),
+              !_isBreakTime
+                  //BUTTONS FOR FOCUS TIME
+                  ? Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        //PLAY BUTTON
+                        if (!_isClockStarted || _isPaused)
+                          ClockControlButton(
+                              onTap: () {
+                                if (!_isClockStarted) {
+                                  startClock();
+                                } else {
+                                  resumeClock();
+                                }
+                                NotificationService()
+                                    .requestNotificationPermission();
+                              },
+                              color: Colors.blueAccent,
+                              icon: Icons.play_arrow,
+                              width: width),
 
-              //BUTTONS
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  //PLAY BUTTON
-                  if (!_isClockStarted || _isPaused)
-                    ClockControlButton(
-                        onTap: () {
-                          if (!_isClockStarted) {
-                            startClock();
-                          } else {
-                            resumeClock();
-                          }
-                        },
-                        color: Colors.blueAccent,
-                        icon: Icons.play_arrow,
-                        width: width),
+                        //PAUSE BUTTON
+                        if (_isClockStarted && !_isPaused)
+                          ClockControlButton(
+                              onTap: pauseClock,
+                              color: Colors.orangeAccent,
+                              icon: Icons.pause,
+                              width: width),
 
-                  //PAUSE BUTTON
-                  if (_isClockStarted && !_isPaused)
-                    ClockControlButton(
-                        onTap: pauseClock,
-                        color: Colors.orangeAccent,
-                        icon: Icons.pause,
-                        width: width),
+                        //RESET BUTTON
+                        if (_isPaused)
+                          ClockControlButton(
+                              onTap: resetClock,
+                              color: Colors.redAccent,
+                              icon: Icons.replay,
+                              width: width)
+                      ],
+                    )
+                  :
+                  //BUTTONS FOR BREAK TIME
+                  Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        //PLAY BUTTON
+                        if (!_isClockStarted || _isPaused)
+                          ClockControlButton(
+                              onTap: () {
+                                if (!_isClockStarted) {
+                                  startClock();
+                                } else {
+                                  resumeClock();
+                                }
+                              },
+                              color: Colors.blueAccent,
+                              icon: Icons.play_arrow,
+                              width: width),
 
-                  //RESET BUTTON
-                  if (_isPaused)
-                    ClockControlButton(
-                        onTap: resetClock,
-                        color: Colors.redAccent,
-                        icon: Icons.replay,
-                        width: width)
-                ],
-              ),
+                        //SKIP BUTTON
+                        if (_isClockStarted && !_isPaused)
+                          Column(
+                            children: [
+                              ClockControlButton(
+                                  onTap: resetClock,
+                                  color: Colors.orangeAccent,
+                                  icon: Icons.skip_next,
+                                  width: width),
+                              const SizedBox(height: 5.0),
+                              const Center(
+                                child: BlinkText(
+                                  'Skip the break',
+                                  style: TextStyle(
+                                      fontSize: 20.0,
+                                      color: Colors.orangeAccent),
+                                  beginColor: Colors.orangeAccent,
+                                  endColor: Colors.transparent,
+                                  times: 10,
+                                  duration: Duration(milliseconds: 1000),
+                                ),
+                              )
+                            ],
+                          ),
+                      ],
+                    ),
             ],
           ),
         ),
@@ -159,6 +211,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   void _restartClock({required int duration, bool autoPause = true}) {
     _clockController.restart(duration: duration);
     if (autoPause) _clockController.pause();
+  }
+
+  void skipTheBreak() {
+    setState(() {
+      _isBreakTime = false;
+      _restartClock(duration: focusTimeInMinutes * varSeconds);
+      _isClockStarted = false;
+      _isPaused = false;
+    });
   }
 
   //Start the clock
@@ -212,6 +273,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   // Handle session completion
   Future<void> handleCompletion() async {
+    NotificationService().showNotification(
+      title: "Session Complete!",
+      body: _isBreakTime
+          ? "Great job! Let's focus again."
+          : "Great job! Take a short break.",
+    );
     await _handleVibration();
     _updateTimesCompleted();
     _playAudio();
@@ -243,7 +310,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       isReverseAnimation: true,
       autoStart: false,
       textStyle: const TextStyle(
-        fontSize: 35.0,
+        fontSize: 55.0,
         fontWeight: FontWeight.bold,
         color: Colors.white,
       ),

@@ -45,5 +45,7 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSUserNotificationUsageDescription</key>
+    <string>Pomodoro needs to send you notifications when your focus time is up.</string>
 </dict>
 </plist>
