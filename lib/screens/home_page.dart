@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:circular_countdown_timer/circular_countdown_timer.dart';
 import 'package:ndialog/ndialog.dart';
-import 'package:vibration/vibration.dart';
-import 'package:audioplayers/audioplayers.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:blinking_text/blinking_text.dart';
-import 'package:timezone/timezone.dart' as tz;
-import 'package:timezone/data/latest.dart' as tz;
 
 import '../utils/clockControlButton.dart';
 import '../screens/settingsPage.dart';
 import '../utils/settingsSharedPreferences.dart';
 import '../notification/localNotifications.dart';
+import '../notification/alarm_manager.dart';
 
 class HomePage extends StatefulWidget {
   final List<Icon> timesCompleted = [];
@@ -33,7 +31,6 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   //ALL VARIABLES
-  final CountDownController _clockController = CountDownController();
   bool _isVibrationEnabled = true;
   bool _isClockStarted = false;
   bool _isPaused = false;
@@ -42,15 +39,28 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   bool _isDarkModeEnabled = false;
   int focusTimeInMinutes = 25;
   int breakTimeInMinutes = 5;
-  int varSeconds = 60;
-  DateTime _scheduleTime = tz.TZDateTime.now(tz.local).add(Duration(seconds: 15));
+  int varSeconds = 6;
+  final pomodoroManager = PomodoroAlarmManager();
+  final CountDownController _clockController = CountDownController();
+  bool _isLoading = true; // Track loading state
+  int _initialDuration = 0; // Store initial timer duration
+
+  PermissionStatus _exactAlarmPermissionStatus = PermissionStatus.granted;
 
   @override
   void initState() {
-    _restartClock(duration: focusTimeInMinutes * varSeconds);
-    getSharedSettingsPrerefence();
+    _initializeSharedPreferences();
     NotificationService().initNotification();
+    _checkExactAlarmPermission();
     super.initState();
+  }
+
+  Future<void> _initializeSharedPreferences() async {
+    await getSharedSettingsPrerefence();
+    setState(() {
+      _initialDuration = focusTimeInMinutes * varSeconds; // Initialize duration
+      _isLoading = false;
+    });
   }
 
   //MAIN SCREEN-UI
@@ -60,6 +70,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     final double width = MediaQuery.of(context).size.width / 1.2;
 
     CircularCountDownTimer clock = buildCircularCountDownTimer(height, width);
+
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -133,14 +149,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                 } else {
                                   resumeClock();
                                 }
-                                NotificationService()
-                                    .requestNotificationPermission();
-                                /*await NotificationService().scheduledNotification(
-                                  id: 1, // Provide a unique ID for the notification
-                                  title: "Pomodoro Timer", // Add a title
-                                  body: "Your focus time is up!", // Add a body text
-                                  scheduledNotificationDateTime: _scheduleTime,
-                                );*/
                               },
                               color: Colors.blueAccent,
                               icon: Icons.play_arrow,
@@ -188,8 +196,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             children: [
                               ClockControlButton(
                                   onTap: () {
-                                    NotificationService().notificationsPlugin.cancel(1);
-                                    resetClock();
+                                    NotificationService()
+                                        .notificationsPlugin
+                                        .cancel(1);
+                                    skipTheBreak();
                                   },
                                   color: Colors.orangeAccent,
                                   icon: Icons.skip_next,
@@ -230,6 +240,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       _restartClock(duration: focusTimeInMinutes * varSeconds);
       _isClockStarted = false;
       _isPaused = false;
+      pomodoroManager.cancelPomodoroAlarm();
     });
   }
 
@@ -239,7 +250,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       _clockController.start();
       _isClockStarted = true;
       _isPaused = false;
-      _scheduleNotification();
+      _scheduleAlarmNotification();
     });
   }
 
@@ -248,7 +259,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     setState(() {
       _clockController.pause();
       _isPaused = true;
-      NotificationService().notificationsPlugin.cancel(1);
+      pomodoroManager.cancelPomodoroAlarm();
     });
   }
 
@@ -257,7 +268,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     setState(() {
       _clockController.resume();
       _isPaused = false;
-      _scheduleNotification();
+      _scheduleAlarmNotification();
     });
   }
 
@@ -277,7 +288,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   void resetClockForPause() {
     setState(() {
       debugPrint("Break time");
-      _restartClock(duration: breakTimeInMinutes * (varSeconds - 2));
+      _restartClock(duration: breakTimeInMinutes * (varSeconds));
       _clockController.pause(); // Ensure the timer does not auto-start
       _isPaused = false;
       _isClockStarted = false;
@@ -285,29 +296,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     });
   }
 
-  // Utility to schedule notification
-  void _scheduleNotification() {
-    // Attempt to parse the time as an integer
-    final int remainingTimeInSeconds = int.tryParse(_clockController.getTime()?.toString() ?? '') ?? 0;
-
-    final DateTime endTime = DateTime.now().add(
-      Duration(seconds: remainingTimeInSeconds), // Remaining time
-    );
-
-    NotificationService().scheduledNotification(
-      id: 1,
-      title: "Pomodoro Timer",
-      body: _isBreakTime ? "Great job! Let's focus again." : "Great job! Take a short break.",
-      scheduledNotificationDateTime: endTime,
-    );
-  }
-
-
   // Handle session completion
   Future<void> handleCompletion() async {
-    await _handleVibration();
-    _updateTimesCompleted();
 
+    //await _handleVibration(); //THis is going to be handled with alarm manager
+    _updateTimesCompleted();
 
     // Reset clock based on session type
     if (!_isBreakTime) {
@@ -344,23 +337,32 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  // Handle device vibration
+  void _scheduleAlarmNotification() {
+    // Attempt to parse the time as an integer
+    final int remainingTimeInSeconds =
+        int.tryParse(_clockController.getTime()?.toString() ?? '') ?? 0;
+    debugPrint('Remaining time $remainingTimeInSeconds');
+
+    final int defaultPomodoroDuration = focusTimeInMinutes * varSeconds;
+    final int finalRemainingTimeInSeconds = (remainingTimeInSeconds != null && remainingTimeInSeconds > 0)
+        ? remainingTimeInSeconds
+        : defaultPomodoroDuration;
+
+    debugPrint('Final Remaining time $finalRemainingTimeInSeconds');
+    pomodoroManager.schedulePomodoroAlarm(
+      durationInSeconds: finalRemainingTimeInSeconds-2,
+      alarmTitle: 'Pomodoro Complete',
+      alarmBody: !_isBreakTime? 'Time to take a break!': 'It is time to focus!',
+    );
+  }
+
+  /*// Handle device vibration
   Future<void> _handleVibration() async {
     if ((await Vibration.hasVibrator()) == true && _isVibrationEnabled) {
       Vibration.vibrate(duration: 500);
       debugPrint("Vibrating for half a second.");
     } else {
       debugPrint("No vibration detected. Vibration pref: $_isVibrationEnabled");
-    }
-  }
-
-  //Play audio
-  /*Future<void> _playAudio() async {
-    final player = AudioPlayer();
-    try {
-      //_isMelodyEnabled ? await player.play(AssetSource('1.mp3')) : null;
-    } catch (e) {
-      debugPrint("Error playing audio: $e");
     }
   }*/
 
@@ -379,6 +381,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       });
     }
   }
+
 
 // Show completion dialog
   Future<void> _showCompletionDialog() async {
@@ -437,5 +440,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     _isEnableMelody = await PreferencesService.isMelodyEnabled();
     _isDarkModeEnabled = await PreferencesService.isDarkModeEnabled();
     setState(() {});
+  }
+
+  void _checkExactAlarmPermission() async {
+    final currentStatus = await Permission.scheduleExactAlarm.status;
+    setState(() {
+      _exactAlarmPermissionStatus = currentStatus;
+    });
   }
 }

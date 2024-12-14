@@ -3,7 +3,7 @@ import 'screens/home_page.dart';
 import 'package:timezone/data/latest.dart' as tz;
 
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   tz.initializeTimeZones();
   runApp(const Pomodoro());

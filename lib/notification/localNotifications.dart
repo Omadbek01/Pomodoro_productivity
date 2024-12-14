@@ -2,14 +2,15 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 
 class NotificationService {
   final FlutterLocalNotificationsPlugin notificationsPlugin =
-      FlutterLocalNotificationsPlugin();
+  FlutterLocalNotificationsPlugin();
 
   Future<void> initNotification() async {
     AndroidInitializationSettings initializationSettingsAndroid =
-        const AndroidInitializationSettings('flutter_logo');
+    const AndroidInitializationSettings('flutter_logo');
 
     var initializationSettingsIOS = const DarwinInitializationSettings(
       requestAlertPermission: true,
@@ -34,15 +35,21 @@ class NotificationService {
           playSound: true,
           visibility: NotificationVisibility.public,
           sound: RawResourceAndroidNotificationSound('notification'),
+          fullScreenIntent: true,
         ),
         iOS: const DarwinNotificationDetails());
   }
+
 
   Future<void> requestNotificationPermission() async {
     PermissionStatus status = await Permission.notification.status;
     if (!status.isGranted) {
       await Permission.notification.request();
     }
+    if (await Permission.scheduleExactAlarm.isDenied) {
+      await Permission.scheduleExactAlarm.request();
+    }
+
   }
 
   Future showNotification(
@@ -69,8 +76,8 @@ class NotificationService {
         body,
         tz.TZDateTime.from(scheduledNotificationDateTime, tz.local),
         notificationDetails(),
-        androidScheduleMode: AndroidScheduleMode.exact,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime);
+        UILocalNotificationDateInterpretation.absoluteTime);
   }
 }
