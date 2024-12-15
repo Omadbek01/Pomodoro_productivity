@@ -14,11 +14,23 @@ class _SettingsPageState extends State<SettingsPage> {
   bool? _isVibrationEnabled;
   bool? _isMelodyEnabled;
   bool? _isDarkModeEnabled;
+  String? _selectedMusic;
+  // Dummy background music list
+  final List<String> _backgroundMusicList = [
+    "Silent Focus",
+    "Forest Breeze",
+    "Ocean Waves",
+    "Rain Drops",
+    "Meditation Melody",
+    "Fireplace Crackle",
+    "Chill Vibes",
+  ];
 
   @override
   void initState() {
     super.initState();
     _loadPreferences();
+    _selectedMusic = _backgroundMusicList.first;
   }
 
   // Load preferences from PreferencesService asynchronously
@@ -71,6 +83,33 @@ class _SettingsPageState extends State<SettingsPage> {
                     },
                   ),
 
+                  // Background Music Selection
+                  ListTile(
+                    title: const Text(
+                      "Background Music (soon)",
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    trailing: DropdownButton<String>(
+                      value: _selectedMusic,
+                      dropdownColor: Colors.black,
+                      items: _backgroundMusicList.map((String music) {
+                        return DropdownMenuItem<String>(
+                          value: music,
+                          child: Text(
+                            music,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (selected) {
+                        setState(() {
+                          _selectedMusic = selected;
+                          // Save the selected music to shared preferences or state
+                        });
+                      },
+                    ),
+                  ),
+
                   const SizedBox(height: 20),
 
                   // Vibration Switch
@@ -85,21 +124,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     },
                   ),
 
-                  // Melody Switch
-                  _buildSwitch(
-                    title: "Enable Melody",
-                    value: _isMelodyEnabled?? true,
-                    onChanged: (value) {
-                      setState(() {
-                        _isMelodyEnabled = value;
-                        PreferencesService.setMelodyEnabled(value);
-                      });
-                    },
-                  ),
-
                   // Dark Mode Switch
                   _buildSwitch(
-                    title: "Enable Dark Mode (coming soon)",
+                    title: "Enable Light Mode (coming soon)",
                     value: _isDarkModeEnabled?? false,
                     onChanged: (value) {
                       setState(() {

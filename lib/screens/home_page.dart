@@ -8,7 +8,9 @@ import '../utils/clockControlButton.dart';
 import '../screens/settingsPage.dart';
 import '../utils/settingsSharedPreferences.dart';
 import '../notification/localNotifications.dart';
-import '../notification/alarm_manager.dart';
+import '../utils/dialog_action_button.dart';
+import '../notification/alarm_manager_foreground.dart';
+import '../utils/timerSyncHandler.dart';
 
 class HomePage extends StatefulWidget {
   final List<Icon> timesCompleted = [];
@@ -39,7 +41,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   bool _isDarkModeEnabled = false;
   int focusTimeInMinutes = 25;
   int breakTimeInMinutes = 5;
-  int varSeconds = 6;
+  int varSeconds = 60;
   final pomodoroManager = PomodoroAlarmManager();
   final CountDownController _clockController = CountDownController();
   bool _isLoading = true; // Track loading state
@@ -49,19 +51,33 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   @override
   void initState() {
+    super.initState();
     _initializeSharedPreferences();
     NotificationService().initNotification();
     _checkExactAlarmPermission();
-    super.initState();
   }
 
   Future<void> _initializeSharedPreferences() async {
     await getSharedSettingsPrerefence();
+
+    // Calculate remaining time dynamically
+    int calculatedDuration = await TimerSyncHandler().calculateRemainingTime(
+        (_isBreakTime ? breakTimeInMinutes : focusTimeInMinutes) * varSeconds);
+
+    // Determine if calculatedDuration is valid
+    bool hasValidSavedTime = calculatedDuration > 0 &&
+        calculatedDuration <= (_isBreakTime
+            ? breakTimeInMinutes * varSeconds
+            : focusTimeInMinutes * varSeconds);
+
     setState(() {
-      _initialDuration = focusTimeInMinutes * varSeconds; // Initialize duration
+      _initialDuration = hasValidSavedTime
+          ? calculatedDuration
+          : focusTimeInMinutes * varSeconds; // Use default duration if invalid
       _isLoading = false;
     });
   }
+
 
   //MAIN SCREEN-UI
   @override
@@ -165,7 +181,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         //RESET BUTTON
                         if (_isPaused)
                           ClockControlButton(
-                              onTap: resetClock,
+                              onTap: () => resetClock(isBreakTime: false),
                               color: Colors.redAccent,
                               icon: Icons.replay,
                               width: width)
@@ -255,7 +271,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   //Pause the clock
-  void pauseClock() {
+  void pauseClock() async {
     setState(() {
       _clockController.pause();
       _isPaused = true;
@@ -268,48 +284,36 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     setState(() {
       _clockController.resume();
       _isPaused = false;
+      _isClockStarted = true;
       _scheduleAlarmNotification();
     });
   }
 
-  //Reset the clock
-  void resetClock() {
+  void resetClock({required bool isBreakTime}) async {
     setState(() {
-      debugPrint("Focus time");
-      _restartClock(duration: focusTimeInMinutes * varSeconds);
+      if (isBreakTime) {
+        debugPrint("Break time");
+        _restartClock(duration: breakTimeInMinutes * varSeconds);
+        _isBreakTime = true;
+      } else {
+        debugPrint("Focus time");
+        _restartClock(duration: focusTimeInMinutes * varSeconds);
+        _isBreakTime = false;
+      }
       _clockController.pause(); // Ensure the timer does not auto-start
       _isPaused = false;
       _isClockStarted = false;
-      _isBreakTime = false;
-    });
-  }
-
-  //Reset the clock for pause
-  void resetClockForPause() {
-    setState(() {
-      debugPrint("Break time");
-      _restartClock(duration: breakTimeInMinutes * (varSeconds));
-      _clockController.pause(); // Ensure the timer does not auto-start
-      _isPaused = false;
-      _isClockStarted = false;
-      _isBreakTime = true;
     });
   }
 
   // Handle session completion
   Future<void> handleCompletion() async {
-
-    //await _handleVibration(); //THis is going to be handled with alarm manager
     _updateTimesCompleted();
-
-    // Reset clock based on session type
     if (!_isBreakTime) {
-      resetClockForPause();
+      resetClock(isBreakTime: true);
     } else {
-      resetClock();
+      resetClock(isBreakTime: false);
     }
-
-    // Show dialog
     await _showCompletionDialog();
   }
 
@@ -318,7 +322,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       double height, double width) {
     return CircularCountDownTimer(
       controller: _clockController,
-      duration: focusTimeInMinutes * varSeconds, // 25 minutes
+      duration: _initialDuration,
       height: height,
       width: width,
       ringColor: Colors.grey.shade800,
@@ -344,27 +348,19 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     debugPrint('Remaining time $remainingTimeInSeconds');
 
     final int defaultPomodoroDuration = focusTimeInMinutes * varSeconds;
-    final int finalRemainingTimeInSeconds = (remainingTimeInSeconds != null && remainingTimeInSeconds > 0)
-        ? remainingTimeInSeconds
-        : defaultPomodoroDuration;
+    final int finalRemainingTimeInSeconds =
+        (remainingTimeInSeconds != null && remainingTimeInSeconds > 0)
+            ? remainingTimeInSeconds
+            : defaultPomodoroDuration;
 
     debugPrint('Final Remaining time $finalRemainingTimeInSeconds');
     pomodoroManager.schedulePomodoroAlarm(
-      durationInSeconds: finalRemainingTimeInSeconds-2,
+      durationInSeconds: finalRemainingTimeInSeconds,
       alarmTitle: 'Pomodoro Complete',
-      alarmBody: !_isBreakTime? 'Time to take a break!': 'It is time to focus!',
+      alarmBody:
+          !_isBreakTime ? 'Time to take a break!' : 'It is time to focus!',
     );
   }
-
-  /*// Handle device vibration
-  Future<void> _handleVibration() async {
-    if ((await Vibration.hasVibrator()) == true && _isVibrationEnabled) {
-      Vibration.vibrate(duration: 500);
-      debugPrint("Vibrating for half a second.");
-    } else {
-      debugPrint("No vibration detected. Vibration pref: $_isVibrationEnabled");
-    }
-  }*/
 
   // Update times completed
   void _updateTimesCompleted() {
@@ -382,7 +378,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     }
   }
 
-
 // Show completion dialog
   Future<void> _showCompletionDialog() async {
     await NDialog(
@@ -395,42 +390,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             : const Text("Great job! Take a short break."),
       ),
       actions: [
-        _buildDialogActionButton(context),
+        DialogActionButton(isBreakTime: _isBreakTime),
       ],
     ).show(context);
-  }
-
-// Build dialog action button
-  Widget _buildDialogActionButton(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      padding: const EdgeInsets.symmetric(horizontal: 30.0, vertical: 15.0),
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.green,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
-        ),
-        child: TweenAnimationBuilder(
-          duration: const Duration(milliseconds: 300),
-          tween: Tween<double>(begin: 14.0, end: 24.0),
-          builder: (context, fontSize, child) {
-            return Text(
-              !_isBreakTime ? "Start Focus" : "Start Break",
-              style: TextStyle(
-                fontSize: fontSize,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            );
-          },
-        ),
-        onPressed: () {
-          Navigator.of(context).pop();
-        },
-      ),
-    );
   }
 
   getSharedSettingsPrerefence() async {
