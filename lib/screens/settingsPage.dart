@@ -85,29 +85,43 @@ class _SettingsPageState extends State<SettingsPage> {
 
                   // Background Music Selection
                   ListTile(
-                    title: const Text(
-                      "Background Music (soon)",
-                      style: TextStyle(color: Colors.white),
-                    ),
-                    trailing: DropdownButton<String>(
-                      value: _selectedMusic,
-                      dropdownColor: Colors.black,
-                      items: _backgroundMusicList.map((String music) {
-                        return DropdownMenuItem<String>(
-                          value: music,
-                          child: Text(
-                            music,
-                            style: const TextStyle(color: Colors.white),
+                    title: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "Background Music (soon)",
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        const SizedBox(
+                            height:
+                                8), // Add spacing between the text and dropdown
+                        Align(
+                          alignment: Alignment
+                              .centerRight, // Align the dropdown to the right
+                          child: DropdownButton<String>(
+                            value: _selectedMusic,
+                            dropdownColor: Colors.black,
+                            isExpanded: false, // Keep dropdown width compact
+                            items: _backgroundMusicList.map((String music) {
+                              return DropdownMenuItem<String>(
+                                value: music,
+                                child: Text(
+                                  music,
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (selected) {
+                              setState(() {
+                                _selectedMusic = selected;
+                                // Save the selected music to shared preferences or state
+                              });
+                            },
                           ),
-                        );
-                      }).toList(),
-                      onChanged: (selected) {
-                        setState(() {
-                          _selectedMusic = selected;
-                          // Save the selected music to shared preferences or state
-                        });
-                      },
+                        ),
+                      ],
                     ),
+                    // No trailing needed since dropdown is in the title
                   ),
 
                   const SizedBox(height: 20),
@@ -127,7 +141,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   // Dark Mode Switch
                   _buildSwitch(
                     title: "Enable Light Mode (coming soon)",
-                    value: _isDarkModeEnabled?? false,
+                    value: _isDarkModeEnabled ?? false,
                     onChanged: (value) {
                       setState(() {
                         _isDarkModeEnabled = value;
@@ -141,15 +155,16 @@ class _SettingsPageState extends State<SettingsPage> {
                   // Save & Back button
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      minimumSize:
-                          const Size(double.infinity, 60), // Full width, fixed height
+                      minimumSize: const Size(
+                          double.infinity, 60), // Full width, fixed height
                       shape: RoundedRectangleBorder(
                         borderRadius:
                             BorderRadius.circular(10), // Rounded corners
                       ),
                     ),
                     onPressed: () async {
-                      print("Preferences saved: Focus Time = $_focusTime, Break Time = $_breakTime");
+                      print(
+                          "Preferences saved: Focus Time = $_focusTime, Break Time = $_breakTime");
                       Navigator.pop(context); // Go back to the previous page
                     },
                     child: const Text('Save & Back',

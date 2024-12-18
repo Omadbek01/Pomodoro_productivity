@@ -1,8 +1,7 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
-import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
 class NotificationService {
   final FlutterLocalNotificationsPlugin notificationsPlugin =
@@ -26,28 +25,36 @@ class NotificationService {
   }
 
   notificationDetails() {
-    return NotificationDetails(
+    return const NotificationDetails(
         android: AndroidNotificationDetails(
           'channelId',
           'channelName',
           importance: Importance.max,
           priority: Priority.high,
           playSound: true,
-          visibility: NotificationVisibility.public,
           sound: RawResourceAndroidNotificationSound('notification'),
           fullScreenIntent: true,
         ),
-        iOS: const DarwinNotificationDetails());
+        iOS: DarwinNotificationDetails());
   }
 
 
   Future<void> requestNotificationPermission() async {
+    final androidSettings = AndroidFlutterLocalNotificationsPlugin();
     PermissionStatus status = await Permission.notification.status;
     if (!status.isGranted) {
       await Permission.notification.request();
     }
     if (await Permission.scheduleExactAlarm.isDenied) {
       await Permission.scheduleExactAlarm.request();
+    }
+    bool permissionGranted = false;
+    await androidSettings.requestNotificationsPermission().then((granted) {
+      permissionGranted = granted ?? false; // Handle nullable bool safely
+    });
+    // Request additional foreground task notification permission if necessary
+    if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
+      await FlutterForegroundTask.requestIgnoreBatteryOptimization();
     }
 
   }

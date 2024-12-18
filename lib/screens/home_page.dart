@@ -9,8 +9,10 @@ import '../screens/settingsPage.dart';
 import '../utils/settingsSharedPreferences.dart';
 import '../notification/localNotifications.dart';
 import '../utils/dialog_action_button.dart';
-import '../notification/alarm_manager_foreground.dart';
+//import '../notification/alarm_manager_foreground.dart';
 import '../utils/timerSyncHandler.dart';
+import '../notification/flutter_foreground_task.dart';
+import '../utils/helper.dart';
 
 class HomePage extends StatefulWidget {
   final List<Icon> timesCompleted = [];
@@ -264,6 +266,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   void startClock() {
     setState(() {
       _clockController.start();
+      startTimerInNotificationBar(_clockController);
       _isClockStarted = true;
       _isPaused = false;
       _scheduleAlarmNotification();
@@ -283,6 +286,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   void resumeClock() {
     setState(() {
       _clockController.resume();
+      startTimerInNotificationBar(_clockController);
       _isPaused = false;
       _isClockStarted = true;
       _scheduleAlarmNotification();
@@ -303,6 +307,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       _clockController.pause(); // Ensure the timer does not auto-start
       _isPaused = false;
       _isClockStarted = false;
+      pomodoroManager.cancelPomodoroAlarm();
     });
   }
 
@@ -343,23 +348,30 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   void _scheduleAlarmNotification() {
     // Attempt to parse the time as an integer
-    final int remainingTimeInSeconds =
-        int.tryParse(_clockController.getTime()?.toString() ?? '') ?? 0;
-    debugPrint('Remaining time $remainingTimeInSeconds');
+
+    final time = _clockController.getTime();
+    debugPrint('Time from clock controller: $time');
+
+    final int remainingTimeInSeconds = parseTimeStringToSeconds(_clockController.getTime());
 
     final int defaultPomodoroDuration = focusTimeInMinutes * varSeconds;
     final int finalRemainingTimeInSeconds =
-        (remainingTimeInSeconds != null && remainingTimeInSeconds > 0)
+        (remainingTimeInSeconds > 0)
             ? remainingTimeInSeconds
             : defaultPomodoroDuration;
 
-    debugPrint('Final Remaining time $finalRemainingTimeInSeconds');
+    debugPrint('Remaining time in seconds $finalRemainingTimeInSeconds');
+
     pomodoroManager.schedulePomodoroAlarm(
       durationInSeconds: finalRemainingTimeInSeconds,
       alarmTitle: 'Pomodoro Complete',
       alarmBody:
           !_isBreakTime ? 'Time to take a break!' : 'It is time to focus!',
     );
+  }
+
+  void startTimerInNotificationBar(CountDownController clockController) {
+    PomodoroAlarmManager().startForegroundService(clockController);
   }
 
   // Update times completed
