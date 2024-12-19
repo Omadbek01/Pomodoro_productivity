@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:circular_countdown_timer/circular_countdown_timer.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:ndialog/ndialog.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:blinking_text/blinking_text.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:workmanager/workmanager.dart';
 
 import '../utils/clockControlButton.dart';
 import '../screens/settingsPage.dart';
@@ -11,7 +14,6 @@ import '../notification/localNotifications.dart';
 import '../utils/dialog_action_button.dart';
 import '../notification/alarm_manager_foreground.dart';
 import '../utils/timerSyncHandler.dart';
-//import '../notification/flutter_foreground_task.dart';
 import '../utils/helper.dart';
 
 class HomePage extends StatefulWidget {
@@ -57,6 +59,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     _initializeSharedPreferences();
     NotificationService().initNotification();
     _checkExactAlarmPermission();
+    Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
   }
 
   Future<void> _initializeSharedPreferences() async {
@@ -99,7 +102,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.black,
-        title: const Text("Pomodoro",
+        title: const Text("Your focus!",
             style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
         actions: [
@@ -121,7 +124,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   !_isBreakTime
                       ? _restartClock(duration: focusTimeInMinutes * varSeconds)
                       : _restartClock(
-                          duration: breakTimeInMinutes * varSeconds);
+                      duration: breakTimeInMinutes * varSeconds);
                 });
               }
             },
@@ -154,91 +157,91 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 ],
               ),
               !_isBreakTime
-                  //BUTTONS FOR FOCUS TIME
+              //BUTTONS FOR FOCUS TIME
                   ? Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        //PLAY BUTTON
-                        if (!_isClockStarted || _isPaused)
-                          ClockControlButton(
-                              onTap: () async {
-                                if (!_isClockStarted) {
-                                  startClock();
-                                } else {
-                                  resumeClock();
-                                }
-                              },
-                              color: Colors.blueAccent,
-                              icon: Icons.play_arrow,
-                              width: width),
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  //PLAY BUTTON
+                  if (!_isClockStarted || _isPaused)
+                    ClockControlButton(
+                        onTap: () async {
+                          if (!_isClockStarted) {
+                            startClock();
+                          } else {
+                            resumeClock();
+                          }
+                        },
+                        color: Colors.blueAccent,
+                        icon: Icons.play_arrow,
+                        width: width),
 
-                        //PAUSE BUTTON
-                        if (_isClockStarted && !_isPaused)
-                          ClockControlButton(
-                              onTap: pauseClock,
-                              color: Colors.orangeAccent,
-                              icon: Icons.pause,
-                              width: width),
+                  //PAUSE BUTTON
+                  if (_isClockStarted && !_isPaused)
+                    ClockControlButton(
+                        onTap: pauseClock,
+                        color: Colors.orangeAccent,
+                        icon: Icons.pause,
+                        width: width),
 
-                        //RESET BUTTON
-                        if (_isPaused)
-                          ClockControlButton(
-                              onTap: () {
-                                resetClock(isBreakTime: false);
-                                pomodoroManager.cancelPomodoroAlarm();
-                              },
-                              color: Colors.redAccent,
-                              icon: Icons.replay,
-                              width: width)
-                      ],
-                    )
+                  //RESET BUTTON
+                  if (_isPaused)
+                    ClockControlButton(
+                        onTap: () {
+                          resetClock(isBreakTime: false);
+                          pomodoroManager.cancelPomodoroAlarm();
+                        },
+                        color: Colors.redAccent,
+                        icon: Icons.replay,
+                        width: width)
+                ],
+              )
                   :
-                  //BUTTONS FOR BREAK TIME
-                  Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        //PLAY BUTTON
-                        if (!_isClockStarted || _isPaused)
-                          ClockControlButton(
-                              onTap: () {
-                                if (!_isClockStarted) {
-                                  startClock();
-                                } else {
-                                  resumeClock();
-                                }
-                              },
-                              color: Colors.blueAccent,
-                              icon: Icons.play_arrow,
-                              width: width),
+              //BUTTONS FOR BREAK TIME
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  //PLAY BUTTON
+                  if (!_isClockStarted || _isPaused)
+                    ClockControlButton(
+                        onTap: () {
+                          if (!_isClockStarted) {
+                            startClock();
+                          } else {
+                            resumeClock();
+                          }
+                        },
+                        color: Colors.blueAccent,
+                        icon: Icons.play_arrow,
+                        width: width),
 
-                        //SKIP BUTTON
-                        if (_isClockStarted && !_isPaused)
-                          Column(
-                            children: [
-                              ClockControlButton(
-                                  onTap: () {
-                                    skipTheBreak();
-                                  },
-                                  color: Colors.orangeAccent,
-                                  icon: Icons.skip_next,
-                                  width: width),
-                              const SizedBox(height: 5.0),
-                              const Center(
-                                child: BlinkText(
-                                  'Skip the break',
-                                  style: TextStyle(
-                                      fontSize: 20.0,
-                                      color: Colors.orangeAccent),
-                                  beginColor: Colors.orangeAccent,
-                                  endColor: Colors.transparent,
-                                  times: 10,
-                                  duration: Duration(milliseconds: 1000),
-                                ),
-                              )
-                            ],
+                  //SKIP BUTTON
+                  if (_isClockStarted && !_isPaused)
+                    Column(
+                      children: [
+                        ClockControlButton(
+                            onTap: () {
+                              skipTheBreak();
+                            },
+                            color: Colors.orangeAccent,
+                            icon: Icons.skip_next,
+                            width: width),
+                        const SizedBox(height: 5.0),
+                        const Center(
+                          child: BlinkText(
+                            'Skip the break',
+                            style: TextStyle(
+                                fontSize: 20.0,
+                                color: Colors.orangeAccent),
+                            beginColor: Colors.orangeAccent,
+                            endColor: Colors.transparent,
+                            times: 10,
+                            duration: Duration(milliseconds: 1000),
                           ),
+                        )
                       ],
                     ),
+                ],
+              ),
             ],
           ),
         ),
@@ -352,7 +355,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     debugPrint('Time from clock controller: $time');
 
     final int remainingTimeInSeconds =
-        parseTimeStringToSeconds(_clockController.getTime());
+    parseTimeStringToSeconds(_clockController.getTime());
 
     final int defaultPomodoroDuration = focusTimeInMinutes * varSeconds;
     final int finalRemainingTimeInSeconds = (remainingTimeInSeconds > 0)
@@ -365,7 +368,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       durationInSeconds: finalRemainingTimeInSeconds,
       alarmTitle: 'Pomodoro Complete',
       alarmBody:
-          !_isBreakTime ? 'Time to take a break!' : 'It is time to focus!',
+      !_isBreakTime ? 'Time to take a break!' : 'It is time to focus!',
     );
     debugPrint(
         "Alarm scheduled for ${DateTime.now().add(Duration(seconds: finalRemainingTimeInSeconds))}");
@@ -423,4 +426,52 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       _exactAlarmPermissionStatus = currentStatus;
     });
   }
+}
+
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    debugPrint("Background task executed: $task");
+    final prefs = await SharedPreferences.getInstance();
+    String? alarmTimeStr = prefs.getString('alarm_time');
+    if (alarmTimeStr != null) {
+      DateTime alarmTime = DateTime.parse(alarmTimeStr);
+      int remainingTime = alarmTime.difference(DateTime.now()).inSeconds;
+
+      // Use the remaining time to update the notification
+      FlutterForegroundTask.updateService(
+        notificationTitle: 'Focus To-Do',
+        notificationText: 'Time left: ${_formatTime(remainingTime)}',
+      );
+
+      // Check and update the CountDownController if there's a discrepancy
+      checkAndUpdateClockController(remainingTime);
+
+      if (remainingTime <= 0) {
+        FlutterForegroundTask.stopService();
+      }
+    }
+    return Future.value(true);
+  });
+}
+
+void checkAndUpdateClockController(int remainingTime) {
+  // Access the CountDownController instance
+  final clockController = CountDownController();
+
+  final int remainingTimeInSeconds = parseTimeStringToSeconds(clockController.getTime());
+
+  debugPrint('Time from clock controller: $remainingTimeInSeconds');
+  final currentSeconds = remainingTimeInSeconds;
+
+  if ((currentSeconds - remainingTime).abs() > 2) {
+    clockController.restart(duration: remainingTime);
+    debugPrint("ClockController updated with remaining time: $remainingTime seconds");
+  }
+}
+
+
+String _formatTime(int seconds) {
+  final minutes = (seconds ~/ 60).toString().padLeft(2, '0');
+  final secs = (seconds % 60).toString().padLeft(2, '0');
+  return '$minutes:$secs';
 }

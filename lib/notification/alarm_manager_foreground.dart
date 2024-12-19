@@ -86,9 +86,6 @@ class PomodoroAlarmManager {
       callback: _foregroundTaskCallback,
     );
     debugPrint('WorkManager: Time left for alarm: ${_formatTime(alarmTime.difference(DateTime.now()).inSeconds)}');
-
-
-
   }
 
   Future<void> stopForegroundTask() async {
@@ -97,8 +94,6 @@ class PomodoroAlarmManager {
       debugPrint('Foreground task stopped.');
     }
   }
-
-
 
   Future<void> schedulePomodoroAlarm({
     required int durationInSeconds,
@@ -211,9 +206,6 @@ class PomodoroAlarmManager {
         // Update notification
         await updateNotification('Time Remaining: $formattedTime');
 
-        // Check and update _clockController if there's a discrepancy. The _clockController value is not correct at this stage.
-        //  checkAndUpdateClockController(remainingTime);
-
         if (userClockController.isPaused) {
           timer.cancel(); // Stop the timer if it's paused
           debugPrint("Timer paused by user.");
@@ -229,7 +221,6 @@ class PomodoroAlarmManager {
   }
 
   Future<void> updateNotification(String message) async {
-    final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
     const androidDetails = AndroidNotificationDetails(
       'timer_channel',
       'Timer Notifications',
@@ -251,23 +242,8 @@ class PomodoroAlarmManager {
     );
   }
 
-  void checkAndUpdateClockController(int remainingTime) {
-    final int remainingTimeInSeconds =
-    parseTimeStringToSeconds(_clockController.getTime());
-
-    debugPrint('Time from clock controller: $remainingTimeInSeconds');
-    final currentSeconds = remainingTimeInSeconds;
-
-    if ((currentSeconds - remainingTime).abs() > 2) {
-      _clockController.restart(duration: remainingTime);
-      debugPrint("ClockController updated with remaining time: $remainingTime seconds");
-    }
-  }
-
-
   void stopTimer() async {
     await Workmanager().cancelByUniqueName("pomodoro_timer_task");
-
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('alarm_time');
@@ -317,7 +293,6 @@ class _PomodoroTaskHandler extends TaskHandler {
 
   @override
   void onReceiveData(Object data) {}
-
 }
 
 void callbackDispatcher() {
