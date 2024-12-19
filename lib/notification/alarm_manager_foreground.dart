@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vibration/vibration.dart';
 import 'package:circular_countdown_timer/circular_countdown_timer.dart';
 import 'package:workmanager/workmanager.dart';
+import '../utils/helper.dart';
 
 String _formatTime(int seconds) {
   final minutes = (seconds ~/ 60).toString().padLeft(2, '0');
@@ -173,12 +174,11 @@ class PomodoroAlarmManager {
     FlutterForegroundTask.setTaskHandler(_PomodoroTaskHandler());
   }
 
-  void startTimer(CountDownController clockController) async {
+  void startTimer(CountDownController userClockController) async {
     timer?.cancel();
 
     final prefs = await SharedPreferences.getInstance();
     String? alarmTimeStr = prefs.getString('alarm_time');
-
 
     if (alarmTimeStr != null) {
       _alarmTime = DateTime.parse(alarmTimeStr);
@@ -197,14 +197,82 @@ class PomodoroAlarmManager {
     } else {
       debugPrint('No alarm time found.');
     }
+
+    timer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      final now = DateTime.now();
+      final remainingTime = _alarmTime!.difference(now).inSeconds;
+
+      if (remainingTime > 0) {
+        final updatedMinutes = remainingTime ~/ 60;
+        final updatedSeconds = remainingTime % 60;
+
+        final formattedTime = '${updatedMinutes.toString().padLeft(2, '0')}:${updatedSeconds.toString().padLeft(2, '0')}';
+
+        // Update notification
+        await updateNotification('Time Remaining: $formattedTime');
+
+        // Check and update _clockController if there's a discrepancy. The _clockController value is not correct at this stage.
+        //  checkAndUpdateClockController(remainingTime);
+
+        if (userClockController.isPaused) {
+          timer.cancel(); // Stop the timer if it's paused
+          debugPrint("Timer paused by user.");
+          return; // Exit early from the periodic callback
+        }
+      } else {
+        // Time has ended
+        timer.cancel();
+        await flutterLocalNotificationsPlugin.cancel(1);
+        FlutterForegroundTask.stopService();
+      }
+    });
   }
+
+  Future<void> updateNotification(String message) async {
+    final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+    const androidDetails = AndroidNotificationDetails(
+      'timer_channel',
+      'Timer Notifications',
+      channelDescription: 'Updates for the countdown timer',
+      importance: Importance.max,
+      priority: Priority.high,
+      onlyAlertOnce: false,
+      silent: true,
+      enableVibration: false,
+    );
+
+    const notificationDetails = NotificationDetails(android: androidDetails);
+
+    await flutterLocalNotificationsPlugin.show(
+      1, // Notification ID
+      'Pomodoro Timer',
+      message,
+      notificationDetails,
+    );
+  }
+
+  void checkAndUpdateClockController(int remainingTime) {
+    final int remainingTimeInSeconds =
+    parseTimeStringToSeconds(_clockController.getTime());
+
+    debugPrint('Time from clock controller: $remainingTimeInSeconds');
+    final currentSeconds = remainingTimeInSeconds;
+
+    if ((currentSeconds - remainingTime).abs() > 2) {
+      _clockController.restart(duration: remainingTime);
+      debugPrint("ClockController updated with remaining time: $remainingTime seconds");
+    }
+  }
+
 
   void stopTimer() async {
     await Workmanager().cancelByUniqueName("pomodoro_timer_task");
 
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('alarm_time');
-
+    timer?.cancel();
+    await flutterLocalNotificationsPlugin.cancel(1);
     FlutterForegroundTask.stopService();
   }
 }
