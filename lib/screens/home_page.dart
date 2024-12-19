@@ -9,9 +9,9 @@ import '../screens/settingsPage.dart';
 import '../utils/settingsSharedPreferences.dart';
 import '../notification/localNotifications.dart';
 import '../utils/dialog_action_button.dart';
-//import '../notification/alarm_manager_foreground.dart';
+import '../notification/alarm_manager_foreground.dart';
 import '../utils/timerSyncHandler.dart';
-import '../notification/flutter_foreground_task.dart';
+//import '../notification/flutter_foreground_task.dart';
 import '../utils/helper.dart';
 
 class HomePage extends StatefulWidget {
@@ -68,9 +68,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
     // Determine if calculatedDuration is valid
     bool hasValidSavedTime = calculatedDuration > 0 &&
-        calculatedDuration <= (_isBreakTime
-            ? breakTimeInMinutes * varSeconds
-            : focusTimeInMinutes * varSeconds);
+        calculatedDuration <=
+            (_isBreakTime
+                ? breakTimeInMinutes * varSeconds
+                : focusTimeInMinutes * varSeconds);
 
     setState(() {
       _initialDuration = hasValidSavedTime
@@ -79,7 +80,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       _isLoading = false;
     });
   }
-
 
   //MAIN SCREEN-UI
   @override
@@ -183,7 +183,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         //RESET BUTTON
                         if (_isPaused)
                           ClockControlButton(
-                              onTap: () => resetClock(isBreakTime: false),
+                              onTap: () {
+                                resetClock(isBreakTime: false);
+                                pomodoroManager.cancelPomodoroAlarm();
+                              },
                               color: Colors.redAccent,
                               icon: Icons.replay,
                               width: width)
@@ -214,9 +217,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             children: [
                               ClockControlButton(
                                   onTap: () {
-                                    NotificationService()
-                                        .notificationsPlugin
-                                        .cancel(1);
                                     skipTheBreak();
                                   },
                                   color: Colors.orangeAccent,
@@ -265,11 +265,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   //Start the clock
   void startClock() {
     setState(() {
+      _scheduleAlarmNotification();
       _clockController.start();
       startTimerInNotificationBar(_clockController);
       _isClockStarted = true;
       _isPaused = false;
-      _scheduleAlarmNotification();
     });
   }
 
@@ -285,11 +285,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   //Resume the clock
   void resumeClock() {
     setState(() {
+      _scheduleAlarmNotification();
       _clockController.resume();
       startTimerInNotificationBar(_clockController);
       _isPaused = false;
       _isClockStarted = true;
-      _scheduleAlarmNotification();
     });
   }
 
@@ -307,7 +307,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       _clockController.pause(); // Ensure the timer does not auto-start
       _isPaused = false;
       _isClockStarted = false;
-      pomodoroManager.cancelPomodoroAlarm();
     });
   }
 
@@ -352,13 +351,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     final time = _clockController.getTime();
     debugPrint('Time from clock controller: $time');
 
-    final int remainingTimeInSeconds = parseTimeStringToSeconds(_clockController.getTime());
+    final int remainingTimeInSeconds =
+        parseTimeStringToSeconds(_clockController.getTime());
 
     final int defaultPomodoroDuration = focusTimeInMinutes * varSeconds;
-    final int finalRemainingTimeInSeconds =
-        (remainingTimeInSeconds > 0)
-            ? remainingTimeInSeconds
-            : defaultPomodoroDuration;
+    final int finalRemainingTimeInSeconds = (remainingTimeInSeconds > 0)
+        ? remainingTimeInSeconds
+        : defaultPomodoroDuration;
 
     debugPrint('Remaining time in seconds $finalRemainingTimeInSeconds');
 
@@ -368,10 +367,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       alarmBody:
           !_isBreakTime ? 'Time to take a break!' : 'It is time to focus!',
     );
+    debugPrint(
+        "Alarm scheduled for ${DateTime.now().add(Duration(seconds: finalRemainingTimeInSeconds))}");
   }
 
   void startTimerInNotificationBar(CountDownController clockController) {
-    PomodoroAlarmManager().startForegroundService(clockController);
+    pomodoroManager.startTimer(clockController);
   }
 
   // Update times completed

@@ -99,5 +99,29 @@ class PreferencesService {
     }
   }
 
+  // Get Alarm Time
+  static Future<DateTime?> getAlarmTime() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final alarmTimeString = preferences.getString('alarmTime');
+      if (alarmTimeString != null) {
+        return DateTime.parse(alarmTimeString);
+      }
+      return null;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+// Set Alarm Time
+  static Future<void> setAlarmTime(DateTime alarmTime) async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setString('alarmTime', alarmTime.toIso8601String());
+    } catch (e) {
+      rethrow;
+    }
+  }
+
 
 }

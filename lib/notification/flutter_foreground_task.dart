@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vibration/vibration.dart';
 import 'package:circular_countdown_timer/circular_countdown_timer.dart';
 import '../utils/helper.dart';
+import 'package:workmanager/workmanager.dart';
 
 
 class PomodoroAlarmManager {

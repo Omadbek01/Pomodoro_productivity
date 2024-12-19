@@ -11,6 +11,10 @@ int parseTimeStringToSeconds(String? timeString) {
       final minutes = int.parse(parts[0]);
       final seconds = int.parse(parts[1]);
       return (minutes * 60) + seconds;
+    } else if (parts.length == 1) {
+      // Handle case where only seconds are provided
+      final seconds = int.parse(parts[0]);
+      return seconds;
     }
   } catch (e) {
     debugPrint('Error parsing time string: $e');

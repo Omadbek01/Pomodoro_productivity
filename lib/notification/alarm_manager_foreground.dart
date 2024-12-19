@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
@@ -5,45 +6,46 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vibration/vibration.dart';
+import 'package:circular_countdown_timer/circular_countdown_timer.dart';
+import 'package:workmanager/workmanager.dart';
+
+String _formatTime(int seconds) {
+  final minutes = (seconds ~/ 60).toString().padLeft(2, '0');
+  final secs = (seconds % 60).toString().padLeft(2, '0');
+  return '$minutes:$secs';
+}
 
 class PomodoroAlarmManager {
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-  FlutterLocalNotificationsPlugin();
-
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
   bool _isPaused = false;
-  int? _remainingTime; // Remaining time in seconds when paused
-  int? _originalDuration; // Original duration of the timer
-  int _notificationId = 0; // Unique ID for each notification
+  DateTime? _alarmTime;
+  final int _notificationId = 0;
+  Timer? timer;
+  final CountDownController _clockController = CountDownController();
 
   PomodoroAlarmManager() {
     _initialize();
   }
 
   Future<void> _initialize() async {
-    // Initialize Timezone and Notifications
     tz.initializeTimeZones();
 
-    // Android and iOS initialization settings
-    const AndroidInitializationSettings initializationSettingsAndroid =
-    AndroidInitializationSettings('@mipmap/ic_launcher');
-    const InitializationSettings initializationSettings =
-    InitializationSettings(
+    const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const InitializationSettings initializationSettings = InitializationSettings(
       android: initializationSettingsAndroid,
       iOS: DarwinInitializationSettings(),
     );
 
-    // Initialize the notification plugin
     await flutterLocalNotificationsPlugin.initialize(
       initializationSettings,
       onDidReceiveNotificationResponse: (response) {
-        print('Notification clicked with payload: ${response.payload}');
+        debugPrint('Notification clicked with payload: ${response.payload}');
         if (response.payload == 'alarm') {
           _handleAlarm();
         }
       },
     );
 
-    // Initialize Flutter Foreground Task
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'foreground_service',
@@ -58,53 +60,57 @@ class PomodoroAlarmManager {
         playSound: false,
       ),
       foregroundTaskOptions: ForegroundTaskOptions(
-        eventAction: ForegroundTaskEventAction.repeat(1000), // 1-second interval
-        autoRunOnBoot: true,
+        eventAction: ForegroundTaskEventAction.repeat(1000),
+        autoRunOnBoot: false,
         allowWakeLock: true,
         allowWifiLock: true,
       ),
     );
-    debugPrint('Flutter foreground task initialized.');
+
+    Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
   }
 
-  Future<void> startForegroundTask() async {
+  Future<void> startForegroundTask(DateTime alarmTime) async {
     if (await FlutterForegroundTask.isRunningService) {
-      print('Foreground task is already running.');
+      debugPrint('Foreground task is already running.');
       return;
     }
 
-    await FlutterForegroundTask.startService(
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('alarm_time', alarmTime.toIso8601String());
+
+    FlutterForegroundTask.startService(
       notificationTitle: 'Pomodoro Timer',
-      notificationText: 'Timer is running...',
+      notificationText: 'Time left: ${_formatTime(alarmTime.difference(DateTime.now()).inSeconds)}',
       callback: _foregroundTaskCallback,
     );
-    debugPrint('Flutter foreground task has started.');
+    debugPrint('WorkManager: Time left for alarm: ${_formatTime(alarmTime.difference(DateTime.now()).inSeconds)}');
+
+
+
   }
 
   Future<void> stopForegroundTask() async {
     if (await FlutterForegroundTask.isRunningService) {
       await FlutterForegroundTask.stopService();
-      print('Foreground task stopped.');
+      debugPrint('Foreground task stopped.');
     }
   }
+
+
 
   Future<void> schedulePomodoroAlarm({
     required int durationInSeconds,
     String alarmTitle = 'Pomodoro Complete',
     String alarmBody = 'Time to take a break!',
   }) async {
-    // Store original duration
-    _originalDuration = durationInSeconds;
-    _remainingTime = durationInSeconds;
+    _alarmTime = DateTime.now().add(Duration(seconds: durationInSeconds));
 
-    // Calculate and save alarm time
-    final now = tz.TZDateTime.now(tz.local);
-    final scheduledTime = now.add(Duration(seconds: durationInSeconds));
-    await _saveAlarmTime(scheduledTime);
+    await _saveAlarmTime(_alarmTime!);
 
-    // Notification details
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
-    AndroidNotificationDetails(
+    await flutterLocalNotificationsPlugin.cancel(_notificationId);
+
+    const androidDetails = AndroidNotificationDetails(
       'pomodoro_channel_id',
       'Pomodoro Notifications',
       channelDescription: 'Notifications for Pomodoro timer completion',
@@ -112,114 +118,160 @@ class PomodoroAlarmManager {
       priority: Priority.high,
       sound: RawResourceAndroidNotificationSound('notification'),
       playSound: true,
+      silent: false,
     );
-    const NotificationDetails platformChannelSpecifics =
-    NotificationDetails(android: androidPlatformChannelSpecifics);
 
-    // Schedule the notification
+    const platformDetails = NotificationDetails(android: androidDetails);
+
     await flutterLocalNotificationsPlugin.zonedSchedule(
       _notificationId,
       alarmTitle,
       alarmBody,
-      scheduledTime,
-      platformChannelSpecifics,
-      androidAllowWhileIdle: true,
+      tz.TZDateTime.from(_alarmTime!, tz.local),
+      platformDetails,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-      UILocalNotificationDateInterpretation.absoluteTime,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.time,
-      payload: 'alarm', // Payload to identify the notification callback
+      payload: 'alarm',
     );
 
-    // Start the foreground service
-    await startForegroundTask();
-
-    print('Pomodoro alarm scheduled for: $scheduledTime');
+    await startForegroundTask(_alarmTime!);
   }
 
   Future<void> cancelPomodoroAlarm() async {
-    // Cancel the current notification and reset the timer
-    _remainingTime = null;
-    _originalDuration = null;
+    _alarmTime = null;
     _isPaused = false;
     await stopForegroundTask();
+
     if (await Vibration.hasVibrator() == true) {
       Vibration.cancel();
     }
+
     await flutterLocalNotificationsPlugin.cancel(_notificationId);
     await _clearAlarmTime();
-    print('Pomodoro alarm reset.');
+    stopTimer();
   }
 
-  /// Handle the alarm (vibration + stop foreground task)
   Future<void> _handleAlarm() async {
     if (await Vibration.hasVibrator() == true) {
       Vibration.vibrate(pattern: [0, 1000, 500, 1000]);
     }
-
-    // Stop the foreground task once the timer ends
     await stopForegroundTask();
   }
 
-  /// Save the alarm time to shared preferences
   Future<void> _saveAlarmTime(DateTime alarmTime) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    prefs.setString("alarmTime", alarmTime.toIso8601String());
-    print('Alarm time saved: $alarmTime');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString("alarm_time", alarmTime.toIso8601String());
   }
 
-  /// Clear the saved alarm time
   Future<void> _clearAlarmTime() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    prefs.remove("alarmTime");
-    print('Alarm time cleared.');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove("alarm_time");
   }
 
-  /// Calculate the remaining time dynamically based on saved alarm time
-  Future<int> calculateRemainingTime(int defaultDuration) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? alarmTimeString = prefs.getString("alarmTime");
+  static void _foregroundTaskCallback() {
+    FlutterForegroundTask.setTaskHandler(_PomodoroTaskHandler());
+  }
 
-    if (alarmTimeString != null) {
-      DateTime alarmTime = DateTime.parse(alarmTimeString);
-      DateTime now = DateTime.now();
+  void startTimer(CountDownController clockController) async {
+    timer?.cancel();
 
-      if (now.isAfter(alarmTime)) {
-        // Timer has completed, reset to default
-        await _clearAlarmTime();
-        return defaultDuration;
+    final prefs = await SharedPreferences.getInstance();
+    String? alarmTimeStr = prefs.getString('alarm_time');
+
+
+    if (alarmTimeStr != null) {
+      _alarmTime = DateTime.parse(alarmTimeStr);
+      final remainingTime = _alarmTime!.difference(DateTime.now()).inSeconds;
+      if (remainingTime > 0) {
+        Workmanager().registerPeriodicTask(
+          "pomodoro_timer_task",
+          "pomodoro_timer",
+          frequency: const Duration(minutes: 15),
+          existingWorkPolicy: ExistingWorkPolicy.replace,
+        );
+        debugPrint('WorkManagerCallBack: Alarm time $alarmTimeStr');
       } else {
-        // Timer is still running, calculate remaining time
-        return alarmTime.difference(now).inSeconds;
+        debugPrint('Alarm time is in the past.');
       }
     } else {
-      return defaultDuration; // No saved alarm time, return default
+      debugPrint('No alarm time found.');
     }
   }
 
-  // Callback for the foreground task
-  @pragma('vm:entry-point')
-  static void _foregroundTaskCallback() {
-    FlutterForegroundTask.setTaskHandler(_PomodoroTaskHandler());
+  void stopTimer() async {
+    await Workmanager().cancelByUniqueName("pomodoro_timer_task");
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('alarm_time');
+
+    FlutterForegroundTask.stopService();
   }
 }
 
 class _PomodoroTaskHandler extends TaskHandler {
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
-    print('Foreground task started.');
+    final prefs = await SharedPreferences.getInstance();
+    String? alarmTimeStr = prefs.getString('alarm_time');
+    if (alarmTimeStr != null) {
+      DateTime alarmTime = DateTime.parse(alarmTimeStr);
+      int remainingTime = alarmTime.difference(DateTime.now()).inSeconds;
+      FlutterForegroundTask.updateService(
+        notificationTitle: 'Pomodoro Timer',
+        notificationText: 'Time left: ${_formatTime(remainingTime)}',
+      );
+    }
   }
 
   @override
-  void onRepeatEvent(DateTime timestamp) {
-    print('Foreground task running: ${timestamp.toIso8601String()}');
+  void onRepeatEvent(DateTime timestamp) async {
+    final prefs = await SharedPreferences.getInstance();
+    String? alarmTimeStr = prefs.getString('alarm_time');
+    if (alarmTimeStr != null) {
+      DateTime alarmTime = DateTime.parse(alarmTimeStr);
+      int remainingTime = alarmTime.difference(DateTime.now()).inSeconds;
+
+      if (remainingTime > 0) {
+        prefs.setString('alarm_time', alarmTime.toIso8601String());
+        FlutterForegroundTask.updateService(
+          notificationTitle: 'Pomodoro Timer',
+          notificationText: 'Time left: ${_formatTime(remainingTime)}',
+        );
+      } else {
+        FlutterForegroundTask.stopService();
+      }
+    }
   }
 
   @override
-  Future<void> onDestroy(DateTime timestamp) async {
-    print('Foreground task stopped.');
-  }
+  Future<void> onDestroy(DateTime timestamp) async {}
 
   @override
   void onReceiveData(Object data) {}
+
+}
+
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    debugPrint("Background task executed: $task");
+    final prefs = await SharedPreferences.getInstance();
+    String? alarmTimeStr = prefs.getString('alarm_time');
+    if (alarmTimeStr != null) {
+      DateTime alarmTime = DateTime.parse(alarmTimeStr);
+      int remainingTime = alarmTime.difference(DateTime.now()).inSeconds;
+
+      if (remainingTime > 0) {
+        prefs.setString('alarm_time', alarmTime.toIso8601String());
+        FlutterForegroundTask.updateService(
+          notificationTitle: 'Pomodoro Timer',
+          notificationText: 'Time left: ${_formatTime(remainingTime)}',
+        );
+      } else {
+        debugPrint("Pomodoro timer stopped.");
+        await FlutterForegroundTask.stopService();
+      }
+    }
+    return Future.value(true);
+  });
 }

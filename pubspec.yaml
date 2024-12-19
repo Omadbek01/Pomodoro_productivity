@@ -44,6 +44,7 @@ dependencies:
   flutter_timezone: ^2.0.0
   android_alarm_manager_plus: ^3.0.1
   flutter_foreground_task: ^8.17.0
+  workmanager: ^0.5.2
 
 
 
