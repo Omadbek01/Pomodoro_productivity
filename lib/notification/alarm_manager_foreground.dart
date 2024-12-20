@@ -9,6 +9,7 @@ import 'package:vibration/vibration.dart';
 import 'package:circular_countdown_timer/circular_countdown_timer.dart';
 import 'package:workmanager/workmanager.dart';
 import '../utils/helper.dart';
+import '../utils/partialWakeLock.dart';
 
 String _formatTime(int seconds) {
   final minutes = (seconds ~/ 60).toString().padLeft(2, '0');
@@ -146,6 +147,7 @@ class PomodoroAlarmManager {
     await flutterLocalNotificationsPlugin.cancel(_notificationId);
     await _clearAlarmTime();
     stopTimer();
+    WakeLockManager.releaseWakeLock();
   }
 
   Future<void> _handleAlarm() async {
@@ -198,6 +200,7 @@ class PomodoroAlarmManager {
       final remainingTime = _alarmTime!.difference(now).inSeconds;
 
       if (remainingTime > 0) {
+        checkAndUpdateClockController(remainingTime, userClockController);
         final updatedMinutes = remainingTime ~/ 60;
         final updatedSeconds = remainingTime % 60;
 
@@ -206,7 +209,7 @@ class PomodoroAlarmManager {
         // Update notification
         await updateNotification('Time Remaining: $formattedTime');
 
-        if (userClockController.isPaused) {
+        if (userClockController.isPaused.value) {
           timer.cancel(); // Stop the timer if it's paused
           debugPrint("Timer paused by user.");
           return; // Exit early from the periodic callback
@@ -218,6 +221,16 @@ class PomodoroAlarmManager {
         FlutterForegroundTask.stopService();
       }
     });
+  }
+
+  void checkAndUpdateClockController(int remainingTime, CountDownController userClockController) {
+    final int remainingTimeInSeconds = parseTimeStringToSeconds(userClockController.getTime());
+    final currentSeconds = remainingTimeInSeconds;
+
+    if ((currentSeconds - remainingTime).abs() > 2) {
+      userClockController.restart(duration: remainingTime);
+      debugPrint("ClockController updated with remaining time: $remainingTime seconds");
+    }
   }
 
   Future<void> updateNotification(String message) async {

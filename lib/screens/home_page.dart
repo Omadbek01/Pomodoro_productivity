@@ -4,6 +4,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:ndialog/ndialog.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:blinking_text/blinking_text.dart';
+import 'package:pomodoro_productivity/utils/partialWakeLock.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 
@@ -372,6 +373,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
     debugPrint(
         "Alarm scheduled for ${DateTime.now().add(Duration(seconds: finalRemainingTimeInSeconds))}");
+    WakeLockManager.acquireWakeLock();
   }
 
   void startTimerInNotificationBar(CountDownController clockController) {
@@ -443,18 +445,15 @@ void callbackDispatcher() {
         notificationText: 'Time left: ${_formatTime(remainingTime)}',
       );
 
-      // Check and update the CountDownController if there's a discrepancy
-      checkAndUpdateClockController(remainingTime);
-
       if (remainingTime <= 0) {
-        FlutterForegroundTask.stopService();
+        await FlutterForegroundTask.stopService();
       }
     }
     return Future.value(true);
   });
 }
 
-void checkAndUpdateClockController(int remainingTime) {
+/*void checkAndUpdateClockController(int remainingTime) {
   // Access the CountDownController instance
   final clockController = CountDownController();
 
@@ -467,7 +466,7 @@ void checkAndUpdateClockController(int remainingTime) {
     clockController.restart(duration: remainingTime);
     debugPrint("ClockController updated with remaining time: $remainingTime seconds");
   }
-}
+}*/
 
 
 String _formatTime(int seconds) {

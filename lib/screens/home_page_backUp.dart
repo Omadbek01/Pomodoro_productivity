@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:circular_countdown_timer/circular_countdown_timer.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:ndialog/ndialog.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:blinking_text/blinking_text.dart';
+import 'package:pomodoro_productivity/utils/partialWakeLock.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:workmanager/workmanager.dart';
 
 import '../utils/clockControlButton.dart';
 import '../screens/settingsPage.dart';
@@ -11,7 +15,6 @@ import '../notification/localNotifications.dart';
 import '../utils/dialog_action_button.dart';
 import '../notification/alarm_manager_foreground.dart';
 import '../utils/timerSyncHandler.dart';
-//import '../notification/flutter_foreground_task.dart';
 import '../utils/helper.dart';
 
 class HomePage extends StatefulWidget {
@@ -57,6 +60,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     _initializeSharedPreferences();
     NotificationService().initNotification();
     _checkExactAlarmPermission();
+    Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
   }
 
   Future<void> _initializeSharedPreferences() async {
@@ -99,7 +103,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.black,
-        title: const Text("Pomodoro",
+        title: const Text("Your focus!",
             style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
         actions: [
@@ -346,8 +350,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   void _scheduleAlarmNotification() {
-    // Attempt to parse the time as an integer
-
     final time = _clockController.getTime();
     debugPrint('Time from clock controller: $time');
 
@@ -369,6 +371,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
     debugPrint(
         "Alarm scheduled for ${DateTime.now().add(Duration(seconds: finalRemainingTimeInSeconds))}");
+    WakeLockManager.acquireWakeLock();
   }
 
   void startTimerInNotificationBar(CountDownController clockController) {
@@ -423,4 +426,52 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       _exactAlarmPermissionStatus = currentStatus;
     });
   }
+}
+
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    debugPrint("Background task executed: $task");
+    final prefs = await SharedPreferences.getInstance();
+    String? alarmTimeStr = prefs.getString('alarm_time');
+    if (alarmTimeStr != null) {
+      DateTime alarmTime = DateTime.parse(alarmTimeStr);
+      int remainingTime = alarmTime.difference(DateTime.now()).inSeconds;
+
+      // Use the remaining time to update the notification
+      FlutterForegroundTask.updateService(
+        notificationTitle: 'Focus To-Do',
+        notificationText: 'Time left: ${_formatTime(remainingTime)}',
+      );
+
+      // Check and update the CountDownController if there's a discrepancy
+      checkAndUpdateClockController(remainingTime);
+
+      if (remainingTime <= 0) {
+        await FlutterForegroundTask.stopService();
+      }
+    }
+    return Future.value(true);
+  });
+}
+
+void checkAndUpdateClockController(int remainingTime) {
+  // Access the CountDownController instance
+  final clockController = CountDownController();
+
+  final int remainingTimeInSeconds = parseTimeStringToSeconds(clockController.getTime());
+
+  debugPrint('Time from clock controller: $remainingTimeInSeconds');
+  final currentSeconds = remainingTimeInSeconds;
+
+  if ((currentSeconds - remainingTime).abs() > 2) {
+    clockController.restart(duration: remainingTime);
+    debugPrint("ClockController updated with remaining time: $remainingTime seconds");
+  }
+}
+
+
+String _formatTime(int seconds) {
+  final minutes = (seconds ~/ 60).toString().padLeft(2, '0');
+  final secs = (seconds % 60).toString().padLeft(2, '0');
+  return '$minutes:$secs';
 }

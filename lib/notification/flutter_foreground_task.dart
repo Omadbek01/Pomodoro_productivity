@@ -231,7 +231,7 @@ class PomodoroAlarmManager {
           // Update notification
           await updateNotification('Time Remaining: $formattedTime');
 
-          if (clockController.isPaused) {
+          if (clockController.isPaused.value) {
             timer.cancel(); // Stop the timer if it's paused
             debugPrint("Timer paused by user.");
             return; // Exit early from the periodic callback
